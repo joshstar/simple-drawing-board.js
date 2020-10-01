@@ -13,6 +13,9 @@
     <button onclick="sdb.destroy()">destroy</button>
     <button onclick="sdb.clear()">clear</button>
     <button onclick="sdb.toggleMode()">toggleMode</button>
+    <button onclick="sdb.setMode('draw')">draw</button>
+    <button onclick="sdb.setMode('erase')">erase</button>
+    <button onclick="sdb.setMode('flood')">flood</button>
     /
     <button onclick="sdb.undo()">undo</button>
     <button onclick="sdb.redo()">redo</button>
@@ -21,7 +24,7 @@
     <button onclick="sdb.setLineColor('#000')">line:black</button>
     <button onclick="sdb.setLineColor('#00f')">line:blue</button>
     /
-    <button onclick="sdb.setLineSize(10)">line:mid</button>
+    <button onclick="sdb.setLineSize(5)">line:mid</button>
     <button onclick="sdb.setLineSize(30)">line:bold</button>
     /
     <button onclick="sdb.fill('#fff')">fill:white</button>
@@ -31,7 +34,7 @@
     <button onclick="sdb.fillImageByElement(window.i, { isOverlay: true })">fillImg(overlay)</button>
   </div>
 
-  <script src="../../dist/simple-drawing-board.js"></script>
+  <script src="../dist/simple-drawing-board.js"></script>
   <script>
     const { create } = window.SimpleDrawingBoard;
     const c = document.getElementById("c");

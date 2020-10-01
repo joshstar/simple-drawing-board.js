@@ -22,6 +22,7 @@ export class SimpleDrawingBoard {
 
     // for drawing
     this._isDrawing = false;
+    this._isFloodMode = false;
     this._timer = null;
     this._coords = {
       old: { x: 0, y: 0 },
@@ -77,6 +78,21 @@ export class SimpleDrawingBoard {
       ? "destination-out"
       : "source-over";
     this._isDrawMode = !this._isDrawMode;
+  }
+
+  setMode(mode) {
+    const modeOperations = {
+      draw: "source-over",
+      erase: "destination-out",
+      flood: "source-over",
+    };
+    if (!modeOperations[mode]) {
+      throw new Error(`Invalid mode argument provided to function "setMode".
+				Valid values are: "draw", "erase", "flood"`);
+    }
+    this._ctx.globalCompositeOperation = modeOperations[mode];
+    this._isFloodMode = mode === "flood";
+    this._isDrawMode = mode === "draw";
   }
 
   toDataURL({ type, quality } = {}) {
@@ -192,6 +208,9 @@ export class SimpleDrawingBoard {
     this._timer = requestAnimationFrame(() => this._drawFrame());
 
     if (!this._isDrawing) return;
+    if (this._isFloodMode) {
+      return this._flood();
+    }
 
     const isSameCoords =
       this._coords.old.x === this._coords.current.x &&
@@ -252,5 +271,134 @@ export class SimpleDrawingBoard {
   _saveHistory() {
     this._history.save(this.toDataURL());
     this._ev.trigger("save", this._history.value);
+  }
+
+  _flood() {
+    this._isDrawing = false;
+    const { width: canvasWidth, height: canvasHeight } = this._ctx.canvas;
+    const imageData = this._ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+    const { x: startX, y: startY } = this._coords.current;
+    const pixelStack = [[startX, startY]];
+    const startColor = this._ctx.getImageData(
+      Math.floor(startX),
+      Math.floor(startY),
+      1,
+      1
+    ).data;
+    const floodColor = this._getFloodColor();
+
+    if (
+      startColor[0] === floodColor.r &&
+      startColor[1] === floodColor.g &&
+      startColor[2] === floodColor.b &&
+      startColor[3] === floodColor.a
+    ) {
+      return;
+    }
+
+    while (pixelStack.length) {
+      const newPos = pixelStack.pop();
+      const x = Math.floor(newPos[0]);
+      let y = Math.floor(newPos[1]);
+      let pixelPos = (y * canvasWidth + x) * 4,
+        reachLeft = false,
+        reachRight = false;
+
+      // Go up as long as the color matches and is inside the canvas
+      while (y >= 0 && this._matchStartColor(imageData, pixelPos, startColor)) {
+        y -= 1;
+        pixelPos -= canvasWidth * 4;
+      }
+
+      pixelPos += canvasWidth * 4;
+      y += 1;
+
+      // Go down as long as the color matches and is inside the canvas
+      while (
+        y < canvasHeight &&
+        this._matchStartColor(imageData, pixelPos, startColor)
+      ) {
+        fillPixel(pixelPos, floodColor);
+
+        // Go left
+        if (x > 0) {
+          if (this._matchStartColor(imageData, pixelPos - 4, startColor)) {
+            if (!reachLeft) {
+              pixelStack.push([x - 1, y]);
+              reachLeft = true;
+            }
+          } else if (reachLeft) {
+            reachLeft = false;
+          }
+        }
+
+        // Go right
+        if (x < canvasWidth - 1) {
+          if (this._matchStartColor(imageData, pixelPos + 4, startColor)) {
+            if (!reachRight) {
+              pixelStack.push([x + 1, y]);
+              reachRight = true;
+            }
+          } else if (reachRight) {
+            reachRight = false;
+          }
+        }
+
+        y += 1;
+        pixelPos += canvasWidth * 4;
+      }
+    }
+
+    function fillPixel(pixelPos, { r, g, b, a }) {
+      imageData.data[pixelPos] = r;
+      imageData.data[pixelPos + 1] = g;
+      imageData.data[pixelPos + 2] = b;
+      imageData.data[pixelPos + 3] = a;
+    }
+    this._ctx.putImageData(imageData, 0, 0);
+  }
+
+  _matchStartColor(imageData, pixelPos, startColor) {
+    const colorData = imageData.data;
+    const [r, g, b, a] = [
+      colorData[pixelPos],
+      colorData[pixelPos + 1],
+      colorData[pixelPos + 2],
+      colorData[pixelPos + 3],
+    ];
+
+    if (a !== 255) {
+      return true;
+    }
+
+    return (
+      r === startColor[0] &&
+      g === startColor[1] &&
+      b === startColor[2] &&
+      a === startColor[3]
+    );
+  }
+
+  _getFloodColor() {
+    // setLineColor accepts any css color value but we need rgb integers.
+    // Instead of using a library to extract the color from the varying
+    // string formats we'll draw a pixel on the canvas and extract
+    // it's rgb color data with getImageData, then reset it.
+    const ctx = this._ctx;
+    const originalColor = ctx.getImageData(0, 0, 1, 1);
+
+    // Draw a pixel using the current line color
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fillRect(0, 0, 1, 1);
+    const floodColor = ctx.getImageData(0, 0, 1, 1);
+
+    // Reset pixel
+    ctx.fillStyle = `rgba(${
+      (originalColor[0], originalColor[1], originalColor[2], originalColor[3])
+    })`;
+    ctx.fillRect(0, 0, 1, 1);
+
+    const [r, g, b, a] = floodColor.data;
+    return { r, g, b, a };
   }
 }
